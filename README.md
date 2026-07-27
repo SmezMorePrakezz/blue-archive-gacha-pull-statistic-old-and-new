@@ -53,8 +53,8 @@ Running the Simulation
 Clone the repository:
 
 ```
-git clone [https://github.com/your-username/blue-archive-gacha-simulator.git](https://github.com/your-username/blue-archive-gacha-simulator.git)
-cd blue-archive-gacha-simulator
+git clone [https://github.com/SmezMorePrakezz/blue-archive-gacha-pull-statistic-old-and-new.git](https://github.com/SmezMorePrakezz/blue-archive-gacha-pull-statistic-old-and-new.git)
+cd blue-archive-gacha-pull-statistic-old-and-new
 ```
 
 
