@@ -119,7 +119,7 @@ def simulate_new_system_dual(total_3star_rate=0.03, featured_rate=0.007):
     - Base 3★ rate: 3.0% (Featured: 0.7%)
     - 100th charge: 3★ 50/50 soft pity.
     - 200th charge: 100% hard guarantee.
-    - Milestone 10-pull tickets are discrete and do NOT overlap between banners.
+    - Milestones (70, 130, 170, 270, 330, 370) award a 10-pull ticket immediately used AT ONCE.
     """
     TOTAL_3STAR_RATE = total_3star_rate
     FEATURED_RATE = featured_rate
@@ -130,6 +130,7 @@ def simulate_new_system_dual(total_3star_rate=0.03, featured_rate=0.007):
     pyro_spent = 0
     spooks = 0
     pity_200_hits = 0
+    tickets_used = 0
 
     students_obtained = {"A": False, "B": False}
 
@@ -137,61 +138,76 @@ def simulate_new_system_dual(total_3star_rate=0.03, featured_rate=0.007):
         if students_obtained[target]:
             continue
 
-        # Reset per-banner ticket tracking when switching targets
-        pending_milestone_ticket = False
-
         while not students_obtained[target]:
             total_pulls += 1
             charge_count += 1
+            pyro_spent += 120
 
-            if pending_milestone_ticket:
-                # 10-pull ticket active: 10 free pulls on current banner
-                pass
-            else:
-                pyro_spent += 120
-
-            # Check if current roll earned a milestone 10-pull ticket
-            if total_pulls in MILESTONE_TICKET_PULLS:
-                pending_milestone_ticket = True
-
-            # If inside a 10-pull ticket block, consume 1 charge roll per loop iteration
-            if pending_milestone_ticket and (total_pulls % 10 == 0):
-                pending_milestone_ticket = False
+            is_milestone = total_pulls in MILESTONE_TICKET_PULLS
 
             # --- CASE 1: HARD GUARANTEE AT 200 CHARGES ---
             if charge_count == 200:
                 students_obtained[target] = True
                 pity_200_hits += 1
                 charge_count = 0
-                break
-
             # --- CASE 2: 100TH CHARGE GUARANTEE (50/50) ---
             elif charge_count == 100:
                 if random.random() < 0.5:
                     students_obtained[target] = True
                     charge_count = 0
-                    break
                 else:
                     spooks += 1
-
             # --- CASE 3: STANDARD PULL ---
             else:
                 if random.random() < TOTAL_3STAR_RATE:
                     if random.random() < NATURAL_FEATURED_PROB:
                         students_obtained[target] = True
                         charge_count = 0
-                        break
                     else:
                         spooks += 1
                         other_target = "B" if target == "A" else "A"
                         if not students_obtained[other_target] and random.random() < 0.01:
                             students_obtained[other_target] = True
 
+            # If milestone reached, immediately consume the 10-pull ticket at once on the current banner
+            if is_milestone:
+                tickets_used += 1
+                # The 10 ticket pulls follow
+                for _ in range(10):
+                    total_pulls += 1
+                    charge_count += 1
+                    # Note: No Pyroxene spent for these 10 pulls!
+
+                    if charge_count == 200:
+                        if not students_obtained[target]:
+                            students_obtained[target] = True
+                            pity_200_hits += 1
+                        charge_count = 0
+                    elif charge_count == 100:
+                        if random.random() < 0.5:
+                            if not students_obtained[target]:
+                                students_obtained[target] = True
+                            charge_count = 0
+                        else:
+                            spooks += 1
+                    else:
+                        if random.random() < TOTAL_3STAR_RATE:
+                            if random.random() < NATURAL_FEATURED_PROB:
+                                if not students_obtained[target]:
+                                    students_obtained[target] = True
+                                charge_count = 0
+                            else:
+                                spooks += 1
+                                other_target = "B" if target == "A" else "A"
+                                if not students_obtained[other_target] and random.random() < 0.01:
+                                    students_obtained[other_target] = True
+
     return {
         "total_pulls": total_pulls,
         "pyro_spent": pyro_spent,
         "spooks": spooks,
         "pity_200_hits": pity_200_hits,
+        "tickets_used": tickets_used
     }
 
 
@@ -261,47 +277,65 @@ def simulate_pre_fes_free_pulls_dual(system="NEW"):
 
     if system == "NEW":
         charge_count = 0
+
         for target in ["A", "B"]:
             if students_obtained[target]:
                 continue
-
-            pending_milestone_ticket = False
 
             while not students_obtained[target]:
                 total_pulls += 1
                 charge_count += 1
 
-                if total_pulls <= 100 or pending_milestone_ticket:
-                    pass  # Free event pulls or milestone ticket pulls
-                else:
+                if total_pulls > 100:
                     pyro_spent += 120
 
-                if total_pulls in MILESTONE_TICKET_PULLS:
-                    pending_milestone_ticket = True
-
-                if pending_milestone_ticket and (total_pulls % 10 == 0):
-                    pending_milestone_ticket = False
+                is_milestone = total_pulls in MILESTONE_TICKET_PULLS
 
                 if charge_count == 200:
                     students_obtained[target] = True
                     pity_200_hits += 1
                     charge_count = 0
-                    break
                 elif charge_count == 100:
                     if random.random() < 0.5:
                         students_obtained[target] = True
                         charge_count = 0
-                        break
                 else:
                     if random.random() < TOTAL_3STAR_RATE:
                         if random.random() < NATURAL_FEATURED_PROB:
                             students_obtained[target] = True
                             charge_count = 0
-                            break
                         else:
                             other = "B" if target == "A" else "A"
                             if not students_obtained[other] and random.random() < 0.01:
                                 students_obtained[other] = True
+
+                if is_milestone:
+                    for _ in range(10):
+                        total_pulls += 1
+                        charge_count += 1
+                        if total_pulls > 100:
+                            pass  # 10-Ticket pull! Free of Pyroxene cost
+
+                        if charge_count == 200:
+                            if not students_obtained[target]:
+                                students_obtained[target] = True
+                                pity_200_hits += 1
+                            charge_count = 0
+                        elif charge_count == 100:
+                            if random.random() < 0.5:
+                                if not students_obtained[target]:
+                                    students_obtained[target] = True
+                                charge_count = 0
+                        else:
+                            if random.random() < TOTAL_3STAR_RATE:
+                                if random.random() < NATURAL_FEATURED_PROB:
+                                    if not students_obtained[target]:
+                                        students_obtained[target] = True
+                                    charge_count = 0
+                                else:
+                                    other = "B" if target == "A" else "A"
+                                    if not students_obtained[other] and random.random() < 0.01:
+                                        students_obtained[other] = True
 
         return {
             "total_pulls": total_pulls,
@@ -369,22 +403,12 @@ def simulate_fes_second_half_dual(system="NEW", behavior="TARGET_STOP"):
                 if students_obtained[target]:
                     continue
 
-                pending_milestone_ticket = False
-
                 while not students_obtained[target]:
                     total_pulls += 1
                     charge_count += 1
+                    pyro_spent += 120
 
-                    if pending_milestone_ticket:
-                        pass
-                    else:
-                        pyro_spent += 120
-
-                    if total_pulls in MILESTONE_TICKET_PULLS:
-                        pending_milestone_ticket = True
-
-                    if pending_milestone_ticket and (total_pulls % 10 == 0):
-                        pending_milestone_ticket = False
+                    is_milestone = total_pulls in MILESTONE_TICKET_PULLS
 
                     if charge_count == 200:
                         students_obtained[target] = True
@@ -392,14 +416,12 @@ def simulate_fes_second_half_dual(system="NEW", behavior="TARGET_STOP"):
                         total_3stars += 1
                         featured_copies += 1
                         charge_count = 0
-                        break
                     elif charge_count == 100:
                         total_3stars += 1
                         if random.random() < 0.5:
                             students_obtained[target] = True
                             featured_copies += 1
                             charge_count = 0
-                            break
                     else:
                         if random.random() < TOTAL_3STAR_RATE:
                             total_3stars += 1
@@ -407,12 +429,44 @@ def simulate_fes_second_half_dual(system="NEW", behavior="TARGET_STOP"):
                                 students_obtained[target] = True
                                 featured_copies += 1
                                 charge_count = 0
-                                break
                             else:
                                 other = "B" if target == "A" else "A"
                                 if not students_obtained[other] and random.random() < 0.01:
                                     students_obtained[other] = True
                                     featured_copies += 1
+
+                    if is_milestone:
+                        for _ in range(10):
+                            total_pulls += 1
+                            charge_count += 1
+
+                            if charge_count == 200:
+                                if not students_obtained[target]:
+                                    students_obtained[target] = True
+                                    pity_200_hits += 1
+                                    featured_copies += 1
+                                total_3stars += 1
+                                charge_count = 0
+                            elif charge_count == 100:
+                                total_3stars += 1
+                                if random.random() < 0.5:
+                                    if not students_obtained[target]:
+                                        students_obtained[target] = True
+                                        featured_copies += 1
+                                    charge_count = 0
+                            else:
+                                if random.random() < TOTAL_3STAR_RATE:
+                                    total_3stars += 1
+                                    if random.random() < NATURAL_FEATURED_PROB:
+                                        if not students_obtained[target]:
+                                            students_obtained[target] = True
+                                            featured_copies += 1
+                                        charge_count = 0
+                                    else:
+                                        other = "B" if target == "A" else "A"
+                                        if not students_obtained[other] and random.random() < 0.01:
+                                            students_obtained[other] = True
+                                            featured_copies += 1
 
             return {
                 "total_pulls": total_pulls,
@@ -468,22 +522,11 @@ def simulate_fes_second_half_dual(system="NEW", behavior="TARGET_STOP"):
 
         if system == "NEW":
             pity_200_hits = 0
-            pending_milestone_ticket = False
-
-            for p in range(1, 201):
+            while total_pulls < 200:
                 total_pulls += 1
                 charge_count += 1
-
-                if pending_milestone_ticket:
-                    pass
-                else:
-                    pyro_spent += 120
-
-                if total_pulls in MILESTONE_TICKET_PULLS:
-                    pending_milestone_ticket = True
-
-                if pending_milestone_ticket and (total_pulls % 10 == 0):
-                    pending_milestone_ticket = False
+                pyro_spent += 120
+                is_milestone = total_pulls in MILESTONE_TICKET_PULLS
 
                 target = "A" if not students_obtained["A"] else "B"
                 if charge_count == 200:
@@ -511,21 +554,43 @@ def simulate_fes_second_half_dual(system="NEW", behavior="TARGET_STOP"):
                                 students_obtained[other] = True
                                 featured_copies += 1
 
+                if is_milestone:
+                    for _ in range(10):
+                        total_pulls += 1
+                        charge_count += 1
+                        t_target = "A" if not students_obtained["A"] else "B"
+
+                        if charge_count == 200:
+                            students_obtained[t_target] = True
+                            total_3stars += 1
+                            featured_copies += 1
+                            pity_200_hits += 1
+                            charge_count = 0
+                        elif charge_count == 100:
+                            total_3stars += 1
+                            if random.random() < 0.5:
+                                students_obtained[t_target] = True
+                                featured_copies += 1
+                                charge_count = 0
+                        else:
+                            if random.random() < TOTAL_3STAR_RATE:
+                                total_3stars += 1
+                                if random.random() < NATURAL_FEATURED_PROB:
+                                    students_obtained[t_target] = True
+                                    featured_copies += 1
+                                    charge_count = 0
+                                else:
+                                    other = "B" if t_target == "A" else "A"
+                                    if not students_obtained[other] and random.random() < 0.01:
+                                        students_obtained[other] = True
+                                        featured_copies += 1
+
             while not (students_obtained["A"] and students_obtained["B"]):
                 target = "A" if not students_obtained["A"] else "B"
                 total_pulls += 1
                 charge_count += 1
-
-                if pending_milestone_ticket:
-                    pass
-                else:
-                    pyro_spent += 120
-
-                if total_pulls in MILESTONE_TICKET_PULLS:
-                    pending_milestone_ticket = True
-
-                if pending_milestone_ticket and (total_pulls % 10 == 0):
-                    pending_milestone_ticket = False
+                pyro_spent += 120
+                is_milestone = total_pulls in MILESTONE_TICKET_PULLS
 
                 if charge_count == 200:
                     students_obtained[target] = True
@@ -533,14 +598,12 @@ def simulate_fes_second_half_dual(system="NEW", behavior="TARGET_STOP"):
                     featured_copies += 1
                     pity_200_hits += 1
                     charge_count = 0
-                    break
                 elif charge_count == 100:
                     total_3stars += 1
                     if random.random() < 0.5:
                         students_obtained[target] = True
                         featured_copies += 1
                         charge_count = 0
-                        break
                 else:
                     if random.random() < TOTAL_3STAR_RATE:
                         total_3stars += 1
@@ -548,7 +611,42 @@ def simulate_fes_second_half_dual(system="NEW", behavior="TARGET_STOP"):
                             students_obtained[target] = True
                             featured_copies += 1
                             charge_count = 0
-                            break
+                        else:
+                            other = "B" if target == "A" else "A"
+                            if not students_obtained[other] and random.random() < 0.01:
+                                students_obtained[other] = True
+                                featured_copies += 1
+
+                if is_milestone:
+                    for _ in range(10):
+                        total_pulls += 1
+                        charge_count += 1
+                        t_target = "A" if not students_obtained["A"] else "B"
+
+                        if charge_count == 200:
+                            students_obtained[t_target] = True
+                            total_3stars += 1
+                            featured_copies += 1
+                            pity_200_hits += 1
+                            charge_count = 0
+                        elif charge_count == 100:
+                            total_3stars += 1
+                            if random.random() < 0.5:
+                                students_obtained[t_target] = True
+                                featured_copies += 1
+                                charge_count = 0
+                        else:
+                            if random.random() < TOTAL_3STAR_RATE:
+                                total_3stars += 1
+                                if random.random() < NATURAL_FEATURED_PROB:
+                                    students_obtained[t_target] = True
+                                    featured_copies += 1
+                                    charge_count = 0
+                                else:
+                                    other = "B" if t_target == "A" else "A"
+                                    if not students_obtained[other] and random.random() < 0.01:
+                                        students_obtained[other] = True
+                                        featured_copies += 1
 
             return {
                 "total_pulls": total_pulls,
@@ -637,7 +735,7 @@ def generate_graphical_report(data_store, save_prefix="blue_archive_gacha_stats"
 
         fig, ax = plt.subplots(figsize=(18, 8), facecolor='#0f172a')
         ax.set_facecolor('#1e293b')
-        fig.suptitle(f"{title}\nNew System (Hybrid Charge Pity + Milestone Tickets) vs. Old System (200 Spark Points)",
+        fig.suptitle(f"{title}\nNew System (Hybrid Charge Pity + Milestone 10-Tickets) vs. Old System (200 Spark Points)",
                      fontsize=15, fontweight='bold', color='#f8fafc', y=0.97)
 
         x = range(num_bins)
@@ -685,7 +783,7 @@ def generate_graphical_report(data_store, save_prefix="blue_archive_gacha_stats"
     # Chart 5: Pyroxene Costs Comparison
     fig5, ax5 = plt.subplots(figsize=(14, 8), facecolor='#0f172a')
     ax5.set_facecolor('#1e293b')
-    fig5.suptitle("AVERAGE PYROXENE COST COMPARISON ACROSS ALL BANNER SCENARIOS\nNew System (Hybrid Charge Pity + Milestone Tickets) vs. Old System (200 Spark Points)",
+    fig5.suptitle("AVERAGE PYROXENE COST COMPARISON ACROSS ALL BANNER SCENARIOS\nNew System (Hybrid Charge Pity + Milestone 10-Tickets) vs. Old System (200 Spark Points)",
                   fontsize=15, fontweight='bold', color='#f8fafc', y=0.97)
 
     scenarios = ["Regular Dual Banner\n(Get A & B)", "Pre-Fes Dual Banner\n(100 Free Rolls)", "2nd Half Fes 6%\n(Behavior A: Target Stop)", "2nd Half Fes 6%\n(Behavior B: 200 Roll Dump)"]
@@ -753,11 +851,10 @@ def generate_graphical_report(data_store, save_prefix="blue_archive_gacha_stats"
 
 
 # ==============================================================================
-# SECTION 4: INDIVIDUAL SENSEI MODE (ROLL-BY-ROLL STEPPER WITH PYRO DISPLAY)
+# SECTION 4: INDIVIDUAL SENSEI MODE (ROLL-BY-ROLL STEPPER)
 # ==============================================================================
 
 def run_individual_mode():
-    """Runs pull-by-pull detailed simulations with live Pyroxene cost counters."""
     while True:
         clear_screen()
         print("==================================================================")
@@ -833,79 +930,92 @@ def simulate_individual_regular_dual(system="NEW"):
 
     total_pulls = 0
     pyro_spent = 0
+    tickets_used = 0
     ten_pull_counter = 0
+
+    def process_single_pull(cost_str, target_student, is_ticket=False):
+        nonlocal total_pulls, pyro_spent, charge, ten_pull_counter
+        nonlocal count_1star, count_2star, count_3star_spook
+
+        total_pulls += 1
+        charge += 1
+        ten_pull_counter += 1
+
+        if not is_ticket:
+            pyro_spent += 120
+
+        res_text = ""
+
+        if charge == 200:
+            if not students_obtained[target_student]:
+                students_obtained[target_student] = True
+                count_featured[target_student] += 1
+                res_text = f"★3 FEATURED STUDENT {target_student}! (200 Hard Guarantee)"
+            else:
+                res_text = f"★3 Duplicate Student {target_student} (200 Hard Guarantee)"
+            charge = 0
+            ten_pull_counter = 0
+        elif charge == 100:
+            ten_pull_counter = 0
+            if random.random() < 0.5:
+                if not students_obtained[target_student]:
+                    students_obtained[target_student] = True
+                    count_featured[target_student] += 1
+                    res_text = f"★3 FEATURED STUDENT {target_student}! (Won 100-Charge 50/50)"
+                else:
+                    res_text = f"★3 Duplicate Student {target_student} (Won 100-Charge 50/50)"
+                charge = 0
+            else:
+                count_3star_spook += 1
+                res_text = "★3 Non-Featured Spook (Lost 100-Charge 50/50)"
+        else:
+            if random.random() < TOTAL_3STAR_RATE:
+                ten_pull_counter = 0
+                if random.random() < NATURAL_FEATURED_PROB:
+                    if not students_obtained[target_student]:
+                        students_obtained[target_student] = True
+                        count_featured[target_student] += 1
+                        res_text = f"★3 FEATURED STUDENT {target_student}! (Won Rate-Up)"
+                    else:
+                        res_text = f"★3 Duplicate Student {target_student} (Won Rate-Up)"
+                    charge = 0
+                else:
+                    count_3star_spook += 1
+                    res_text = "★3 Non-Featured Student (Spook)"
+            else:
+                if ten_pull_counter == 10:
+                    count_2star += 1
+                    res_text = "★2 Student (10-Pull Protection)"
+                    ten_pull_counter = 0
+                else:
+                    if random.random() < (BASE_2STAR_RATE / (1.0 - TOTAL_3STAR_RATE)):
+                        count_2star += 1
+                        res_text = "★2 Student"
+                        ten_pull_counter = 0
+                    else:
+                        count_1star += 1
+                        res_text = "★1 Student"
+
+        print(f"Roll {total_pulls:03d} [{cost_str:13s}] [Total Pyro: {pyro_spent:6,}] | Charge: {charge:03d}/200 | Result: {res_text}")
 
     if system == "NEW":
         charge = 0
-
         for target in ["A", "B"]:
             if students_obtained[target]:
                 continue
-
-            pending_milestone_ticket = False
-
             print(f"\n>>> Target Banner Student {target} <<<")
             while not students_obtained[target]:
-                total_pulls += 1
-                charge += 1
-                ten_pull_counter += 1
+                is_milestone = (total_pulls + 1) in MILESTONE_TICKET_PULLS
+                process_single_pull("120 Pyroxene", target, is_ticket=False)
 
-                if pending_milestone_ticket:
-                    cost = "10-TICKET"
-                else:
-                    cost = "120 Pyro"
-                    pyro_spent += 120
+                # Milestone reached: Use 10-pull ticket immediately at once on current banner
+                if is_milestone:
+                    tickets_used += 1
+                    print(f"\n   >>> [MILESTONE REACHED] Redeemed 10-Recruitment Ticket! Executing 10 pulls at once... <<<")
+                    for _ in range(10):
+                        process_single_pull("10-TICKET", target, is_ticket=True)
+                    print(f"   >>> [10-TICKET FINISHED] Continuing standard pulls... <<<\n")
 
-                if total_pulls in MILESTONE_TICKET_PULLS:
-                    pending_milestone_ticket = True
-
-                res_text_milestone = " -> [MILESTONE: Received 10-Pull Ticket!]" if total_pulls in MILESTONE_TICKET_PULLS else ""
-
-                if pending_milestone_ticket and (total_pulls % 10 == 0):
-                    pending_milestone_ticket = False
-
-                if charge == 200:
-                    students_obtained[target] = True
-                    count_featured[target] += 1
-                    res_text = f"★3 FEATURED STUDENT {target}! (200 Hard Guarantee)" + res_text_milestone
-                    charge = 0
-                    ten_pull_counter = 0
-                elif charge == 100:
-                    ten_pull_counter = 0
-                    if random.random() < 0.5:
-                        students_obtained[target] = True
-                        count_featured[target] += 1
-                        res_text = f"★3 FEATURED STUDENT {target}! (Won 100-Charge 50/50)" + res_text_milestone
-                        charge = 0
-                    else:
-                        count_3star_spook += 1
-                        res_text = "★3 Non-Featured Spook (Lost 100-Charge 50/50)" + res_text_milestone
-                else:
-                    if random.random() < TOTAL_3STAR_RATE:
-                        ten_pull_counter = 0
-                        if random.random() < NATURAL_FEATURED_PROB:
-                            students_obtained[target] = True
-                            count_featured[target] += 1
-                            res_text = f"★3 FEATURED STUDENT {target}! (Won Rate-Up)" + res_text_milestone
-                            charge = 0
-                        else:
-                            count_3star_spook += 1
-                            res_text = "★3 Non-Featured Student (Spook)" + res_text_milestone
-                    else:
-                        if ten_pull_counter == 10:
-                            count_2star += 1
-                            res_text = "★2 Student (10-Pull Protection)" + res_text_milestone
-                            ten_pull_counter = 0
-                        else:
-                            if random.random() < (BASE_2STAR_RATE / (1.0 - TOTAL_3STAR_RATE)):
-                                count_2star += 1
-                                res_text = "★2 Student" + res_text_milestone
-                                ten_pull_counter = 0
-                            else:
-                                count_1star += 1
-                                res_text = "★1 Student" + res_text_milestone
-
-                print(f"Roll {total_pulls:03d} [{cost:9s}] (Spent: {pyro_spent:6,d} Pyros) | Charge: {charge:03d}/200 | Result: {res_text}")
                 if students_obtained[target]:
                     break
     else:  # OLD SYSTEM
@@ -914,8 +1024,8 @@ def simulate_individual_regular_dual(system="NEW"):
             target = "A" if not students_obtained["A"] else "B"
             total_pulls += 1
             points += 1
-            ten_pull_counter += 1
             pyro_spent += 120
+            ten_pull_counter += 1
             res_text = ""
 
             if random.random() < TOTAL_3STAR_RATE:
@@ -948,13 +1058,13 @@ def simulate_individual_regular_dual(system="NEW"):
                 res_text += f" -> [200 SPARK SHOP: Redeemed Student {missing}!]"
                 points = 0
 
-            print(f"Roll {total_pulls:03d} [120 Pyro ] (Spent: {pyro_spent:6,d} Pyros) | Points: {points:03d}/200 | Target: {target} | Result: {res_text}")
+            print(f"Roll {total_pulls:03d} [120 Pyroxene ] [Total Pyro: {pyro_spent:6,}] | Points: {points:03d}/200 | Target: {target} | Result: {res_text}")
 
     total_3stars = count_3star_spook + sum(count_featured.values())
     total_featured = sum(count_featured.values())
-    print("\n" + "=" * 66)
+    print("\n" + "=" * 70)
     print(f"SUCCESS! Acquired both students in {total_pulls} total rolls.")
-    print(f" TOTAL PYROXENES SPENT: {pyro_spent:,} Pyroxenes")
+    print(f"TOTAL PYROXENE SPENT: {pyro_spent:,} Pyroxenes ({tickets_used} Milestone 10-Tickets used)")
     print("\nSTUDENT YIELD SUMMARY:")
     print(f" • 1★ Students: {count_1star:3d}")
     print(f" • 2★ Students: {count_2star:3d}")
@@ -976,81 +1086,98 @@ def simulate_individual_pre_fes(system="NEW"):
 
     total_pulls = 0
     pyro_spent = 0
+    tickets_used = 0
     ten_pull_counter = 0
+
+    def process_single_pull(cost_str, target_student, is_free_event=False, is_ticket=False):
+        nonlocal total_pulls, pyro_spent, charge, ten_pull_counter
+        nonlocal count_1star, count_2star, count_3star_spook
+
+        total_pulls += 1
+        charge += 1
+        ten_pull_counter += 1
+
+        if not is_free_event and not is_ticket:
+            pyro_spent += 120
+
+        res_text = ""
+
+        if charge == 200:
+            if not students_obtained[target_student]:
+                students_obtained[target_student] = True
+                count_featured[target_student] += 1
+                res_text = f"★3 FEATURED STUDENT {target_student}! (200 Hard Guarantee)"
+            else:
+                res_text = f"★3 Duplicate Student {target_student} (200 Hard Guarantee)"
+            charge = 0
+            ten_pull_counter = 0
+        elif charge == 100:
+            ten_pull_counter = 0
+            if random.random() < 0.5:
+                if not students_obtained[target_student]:
+                    students_obtained[target_student] = True
+                    count_featured[target_student] += 1
+                    res_text = f"★3 FEATURED STUDENT {target_student}! (Won 100-Charge 50/50)"
+                else:
+                    res_text = f"★3 Duplicate Student {target_student} (Won 100-Charge 50/50)"
+                charge = 0
+            else:
+                count_3star_spook += 1
+                res_text = "★3 Non-Featured Spook (Lost 100-Charge 50/50)"
+        else:
+            if random.random() < TOTAL_3STAR_RATE:
+                ten_pull_counter = 0
+                if random.random() < NATURAL_FEATURED_PROB:
+                    if not students_obtained[target_student]:
+                        students_obtained[target_student] = True
+                        count_featured[target_student] += 1
+                        res_text = f"★3 FEATURED STUDENT {target_student}! (Won Rate-Up)"
+                    else:
+                        res_text = f"★3 Duplicate Student {target_student} (Won Rate-Up)"
+                    charge = 0
+                else:
+                    count_3star_spook += 1
+                    res_text = "★3 Non-Featured Student"
+            else:
+                if ten_pull_counter == 10:
+                    count_2star += 1
+                    res_text = "★2 Student (10-Pull Protection)"
+                    ten_pull_counter = 0
+                else:
+                    if random.random() < (BASE_2STAR_RATE / (1.0 - TOTAL_3STAR_RATE)):
+                        count_2star += 1
+                        res_text = "★2 Student"
+                        ten_pull_counter = 0
+                    else:
+                        count_1star += 1
+                        res_text = "★1 Student"
+
+        print(f"Roll {total_pulls:03d} [{cost_str:13s}] [Total Pyro: {pyro_spent:6,}] | Charge: {charge:03d}/200 | Result: {res_text}")
 
     if system == "NEW":
         charge = 0
-
         for target in ["A", "B"]:
             if students_obtained[target]:
                 continue
-
-            pending_milestone_ticket = False
-
             print(f"\n>>> Target Banner Pre-Fes Student {target} <<<")
             while not students_obtained[target]:
-                total_pulls += 1
-                charge += 1
-                ten_pull_counter += 1
+                is_milestone = (total_pulls + 1) in MILESTONE_TICKET_PULLS
+                is_free_evt = (total_pulls + 1) <= 100
+                c_str = "FREE EVENT" if is_free_evt else "120 Pyroxene"
 
-                if total_pulls <= 100:
-                    cost = "FREE EVENT"
-                elif pending_milestone_ticket:
-                    cost = "10-TICKET"
-                else:
-                    cost = "120 Pyro"
-                    pyro_spent += 120
+                process_single_pull(c_str, target, is_free_event=is_free_evt, is_ticket=False)
 
-                if total_pulls in MILESTONE_TICKET_PULLS:
-                    pending_milestone_ticket = True
+                if is_milestone:
+                    tickets_used += 1
+                    print(f"\n   >>> [MILESTONE REACHED] Redeemed 10-Recruitment Ticket! Executing 10 pulls at once... <<<")
+                    for _ in range(10):
+                        is_free_evt_sub = (total_pulls + 1) <= 100
+                        c_str_sub = "FREE EVENT" if is_free_evt_sub else "10-TICKET"
+                        process_single_pull(c_str_sub, target, is_free_event=is_free_evt_sub, is_ticket=not is_free_evt_sub)
+                    print(f"   >>> [10-TICKET FINISHED] Continuing standard pulls... <<<\n")
 
-                res_text_milestone = " -> [MILESTONE: Received 10-Pull Ticket!]" if total_pulls in MILESTONE_TICKET_PULLS else ""
-
-                if pending_milestone_ticket and (total_pulls % 10 == 0):
-                    pending_milestone_ticket = False
-
-                if charge == 200:
-                    students_obtained[target] = True
-                    count_featured[target] += 1
-                    res_text = f"★3 FEATURED STUDENT {target}! (200 Hard Guarantee)" + res_text_milestone
-                    charge = 0
-                    ten_pull_counter = 0
-                elif charge == 100:
-                    ten_pull_counter = 0
-                    if random.random() < 0.5:
-                        students_obtained[target] = True
-                        count_featured[target] += 1
-                        res_text = f"★3 FEATURED STUDENT {target}! (Won 100-Charge 50/50)" + res_text_milestone
-                        charge = 0
-                    else:
-                        count_3star_spook += 1
-                        res_text = "★3 Non-Featured Spook (Lost 100-Charge 50/50)" + res_text_milestone
-                else:
-                    if random.random() < TOTAL_3STAR_RATE:
-                        ten_pull_counter = 0
-                        if random.random() < NATURAL_FEATURED_PROB:
-                            students_obtained[target] = True
-                            count_featured[target] += 1
-                            res_text = f"★3 FEATURED STUDENT {target}! (Won Rate-Up)" + res_text_milestone
-                            charge = 0
-                        else:
-                            count_3star_spook += 1
-                            res_text = "★3 Non-Featured Student" + res_text_milestone
-                    else:
-                        if ten_pull_counter == 10:
-                            count_2star += 1
-                            res_text = "★2 Student (10-Pull Protection)" + res_text_milestone
-                            ten_pull_counter = 0
-                        else:
-                            if random.random() < (BASE_2STAR_RATE / (1.0 - TOTAL_3STAR_RATE)):
-                                count_2star += 1
-                                res_text = "★2 Student" + res_text_milestone
-                                ten_pull_counter = 0
-                            else:
-                                count_1star += 1
-                                res_text = "★1 Student" + res_text_milestone
-
-                print(f"Roll {total_pulls:03d} [{cost:10s}] (Spent: {pyro_spent:6,d} Pyros) | Charge: {charge:03d}/200 | Result: {res_text}")
+                if students_obtained[target]:
+                    break
     else:
         points = 0
         while not (students_obtained["A"] and students_obtained["B"]):
@@ -1060,9 +1187,9 @@ def simulate_individual_pre_fes(system="NEW"):
             ten_pull_counter += 1
 
             if total_pulls <= 100:
-                cost = "FREE EVENT"
+                cost_str = "FREE EVENT"
             else:
-                cost = "120 Pyro"
+                cost_str = "120 Pyroxene"
                 pyro_spent += 120
 
             res_text = ""
@@ -1097,13 +1224,13 @@ def simulate_individual_pre_fes(system="NEW"):
                 res_text += f" -> [200 SPARK SHOP: Redeemed Student {missing}!]"
                 points = 0
 
-            print(f"Roll {total_pulls:03d} [{cost:10s}] (Spent: {pyro_spent:6,d} Pyros) | Points: {points:03d}/200 | Target: {target} | Result: {res_text}")
+            print(f"Roll {total_pulls:03d} [{cost_str:13s}] [Total Pyro: {pyro_spent:6,}] | Points: {points:03d}/200 | Target: {target} | Result: {res_text}")
 
     total_3stars = count_3star_spook + sum(count_featured.values())
     total_featured = sum(count_featured.values())
-    print("\n" + "=" * 66)
+    print("\n" + "=" * 70)
     print(f"SUCCESS! Both Pre-Fes students acquired in {total_pulls} pulls.")
-    print(f" TOTAL PYROXENES SPENT: {pyro_spent:,} Pyroxenes")
+    print(f"TOTAL PYROXENE SPENT: {pyro_spent:,} Pyroxenes ({tickets_used} Milestone 10-Tickets used)")
     print("\nSTUDENT YIELD SUMMARY:")
     print(f" • 1★ Students: {count_1star:3d}")
     print(f" • 2★ Students: {count_2star:3d}")
@@ -1125,88 +1252,102 @@ def simulate_individual_fes_second_half(system="NEW", behavior="TARGET_STOP"):
 
     total_pulls = 0
     pyro_spent = 0
+    tickets_used = 0
     ten_pull_counter = 0
+
+    def process_single_pull(cost_str, target_student, is_ticket=False):
+        nonlocal total_pulls, pyro_spent, charge, ten_pull_counter
+        nonlocal count_1star, count_2star, count_3star_spook
+
+        total_pulls += 1
+        charge += 1
+        ten_pull_counter += 1
+
+        if not is_ticket:
+            pyro_spent += 120
+
+        res_text = ""
+
+        if charge == 200:
+            if not students_obtained[target_student]:
+                students_obtained[target_student] = True
+                count_featured[target_student] += 1
+                res_text = f"★3 FES STUDENT {target_student}! (200 Hard Guarantee)"
+            else:
+                res_text = f"★3 Duplicate Fes Student {target_student} (200 Hard Guarantee)"
+            charge = 0
+            ten_pull_counter = 0
+        elif charge == 100:
+            ten_pull_counter = 0
+            if random.random() < 0.5:
+                if not students_obtained[target_student]:
+                    students_obtained[target_student] = True
+                    count_featured[target_student] += 1
+                    res_text = f"★3 FES STUDENT {target_student}! (Won 50/50)"
+                else:
+                    res_text = f"★3 Duplicate Fes Student {target_student} (Won 50/50)"
+                charge = 0
+            else:
+                count_3star_spook += 1
+                res_text = "★3 6% Rate Spook"
+        else:
+            if random.random() < TOTAL_3STAR_RATE:
+                ten_pull_counter = 0
+                if random.random() < NATURAL_FEATURED_PROB:
+                    if not students_obtained[target_student]:
+                        students_obtained[target_student] = True
+                        count_featured[target_student] += 1
+                        res_text = f"★3 FES STUDENT {target_student}!"
+                    else:
+                        res_text = f"★3 Duplicate Fes Student {target_student}!"
+                    charge = 0
+                else:
+                    count_3star_spook += 1
+                    res_text = "★3 6% Rate Spook"
+            else:
+                if ten_pull_counter == 10:
+                    count_2star += 1
+                    res_text = "★2 Student (10-Pull Protection)"
+                    ten_pull_counter = 0
+                else:
+                    if random.random() < (BASE_2STAR_RATE / (1.0 - TOTAL_3STAR_RATE)):
+                        count_2star += 1
+                        res_text = "★2 Student"
+                        ten_pull_counter = 0
+                    else:
+                        count_1star += 1
+                        res_text = "★1 Student"
+
+        print(f"Roll {total_pulls:03d} [{cost_str:13s}] [Total Pyro: {pyro_spent:6,}] | Charge: {charge:03d}/200 | Result: {res_text}")
 
     if behavior == "TARGET_STOP":
         if system == "NEW":
             charge = 0
-
             for target in ["A", "B"]:
                 if students_obtained[target]:
                     continue
-
-                pending_milestone_ticket = False
-
                 print(f"\n>>> Target Fes Student {target} <<<")
                 while not students_obtained[target]:
-                    total_pulls += 1
-                    charge += 1
-                    ten_pull_counter += 1
+                    is_milestone = (total_pulls + 1) in MILESTONE_TICKET_PULLS
+                    process_single_pull("120 Pyroxene", target, is_ticket=False)
 
-                    if pending_milestone_ticket:
-                        cost = "10-TICKET"
-                    else:
-                        cost = "120 Pyro"
-                        pyro_spent += 120
+                    if is_milestone:
+                        tickets_used += 1
+                        print(f"\n   >>> [MILESTONE REACHED] Redeemed 10-Recruitment Ticket! Executing 10 pulls at once... <<<")
+                        for _ in range(10):
+                            process_single_pull("10-TICKET", target, is_ticket=True)
+                        print(f"   >>> [10-TICKET FINISHED] Continuing standard pulls... <<<\n")
 
-                    if total_pulls in MILESTONE_TICKET_PULLS:
-                        pending_milestone_ticket = True
-
-                    res_text_milestone = " -> [MILESTONE: Received 10-Pull Ticket!]" if total_pulls in MILESTONE_TICKET_PULLS else ""
-
-                    if pending_milestone_ticket and (total_pulls % 10 == 0):
-                        pending_milestone_ticket = False
-
-                    if charge == 200:
-                        students_obtained[target] = True
-                        count_featured[target] += 1
-                        res_text = f"★3 FES STUDENT {target}! (200 Hard Guarantee)" + res_text_milestone
-                        charge = 0
-                        ten_pull_counter = 0
-                    elif charge == 100:
-                        ten_pull_counter = 0
-                        if random.random() < 0.5:
-                            students_obtained[target] = True
-                            count_featured[target] += 1
-                            res_text = f"★3 FES STUDENT {target}! (Won 50/50)" + res_text_milestone
-                            charge = 0
-                        else:
-                            count_3star_spook += 1
-                            res_text = "★3 6% Rate Spook" + res_text_milestone
-                    else:
-                        if random.random() < TOTAL_3STAR_RATE:
-                            ten_pull_counter = 0
-                            if random.random() < NATURAL_FEATURED_PROB:
-                                students_obtained[target] = True
-                                count_featured[target] += 1
-                                res_text = f"★3 FES STUDENT {target}!" + res_text_milestone
-                                charge = 0
-                            else:
-                                count_3star_spook += 1
-                                res_text = "★3 6% Rate Spook" + res_text_milestone
-                        else:
-                            if ten_pull_counter == 10:
-                                count_2star += 1
-                                res_text = "★2 Student (10-Pull Protection)" + res_text_milestone
-                                ten_pull_counter = 0
-                            else:
-                                if random.random() < (BASE_2STAR_RATE / (1.0 - TOTAL_3STAR_RATE)):
-                                    count_2star += 1
-                                    res_text = "★2 Student" + res_text_milestone
-                                    ten_pull_counter = 0
-                                else:
-                                    count_1star += 1
-                                    res_text = "★1 Student" + res_text_milestone
-
-                    print(f"Roll {total_pulls:03d} [{cost:9s}] (Spent: {pyro_spent:6,d} Pyros) | Charge: {charge:03d}/200 | Result: {res_text}")
+                    if students_obtained[target]:
+                        break
         else:
             points = 0
             while not (students_obtained["A"] and students_obtained["B"]):
                 target = "A" if not students_obtained["A"] else "B"
                 total_pulls += 1
                 points += 1
-                ten_pull_counter += 1
                 pyro_spent += 120
+                ten_pull_counter += 1
                 res_text = ""
 
                 if random.random() < TOTAL_3STAR_RATE:
@@ -1239,13 +1380,125 @@ def simulate_individual_fes_second_half(system="NEW", behavior="TARGET_STOP"):
                     res_text += f" -> [200 SPARK SHOP: Redeemed Student {missing}!]"
                     points = 0
 
-                print(f"Roll {total_pulls:03d} [120 Pyro ] (Spent: {pyro_spent:6,d} Pyros) | Points: {points:03d}/200 | Result: {res_text}")
+                print(f"Roll {total_pulls:03d} [120 Pyroxene ] [Total Pyro: {pyro_spent:6,}] | Points: {points:03d}/200 | Result: {res_text}")
+
+    else:  # FULL DUMP Behavior
+        if system == "NEW":
+            charge = 0
+            while total_pulls < 200:
+                target = "A" if not students_obtained["A"] else "B"
+                is_milestone = (total_pulls + 1) in MILESTONE_TICKET_PULLS
+                process_single_pull("120 Pyroxene", target, is_ticket=False)
+
+                if is_milestone:
+                    tickets_used += 1
+                    print(f"\n   >>> [MILESTONE REACHED] Redeemed 10-Recruitment Ticket! Executing 10 pulls at once... <<<")
+                    for _ in range(10):
+                        t_sub = "A" if not students_obtained["A"] else "B"
+                        process_single_pull("10-TICKET", t_sub, is_ticket=True)
+                    print(f"   >>> [10-TICKET FINISHED] Continuing standard pulls... <<<\n")
+
+            while not (students_obtained["A"] and students_obtained["B"]):
+                target = "A" if not students_obtained["A"] else "B"
+                is_milestone = (total_pulls + 1) in MILESTONE_TICKET_PULLS
+                process_single_pull("120 Pyroxene", target, is_ticket=False)
+
+                if is_milestone:
+                    tickets_used += 1
+                    print(f"\n   >>> [MILESTONE REACHED] Redeemed 10-Recruitment Ticket! Executing 10 pulls at once... <<<")
+                    for _ in range(10):
+                        t_sub = "A" if not students_obtained["A"] else "B"
+                        process_single_pull("10-TICKET", t_sub, is_ticket=True)
+                    print(f"   >>> [10-TICKET FINISHED] Continuing standard pulls... <<<\n")
+
+        else:  # OLD SYSTEM FULL DUMP
+            points = 0
+            for p in range(1, 201):
+                total_pulls += 1
+                points += 1
+                pyro_spent += 120
+                ten_pull_counter += 1
+                target = "A" if not students_obtained["A"] else "B"
+                res_text = ""
+
+                if random.random() < TOTAL_3STAR_RATE:
+                    ten_pull_counter = 0
+                    if random.random() < NATURAL_FEATURED_PROB:
+                        students_obtained[target] = True
+                        count_featured[target] += 1
+                        res_text = f"★3 FES STUDENT {target}!"
+                    else:
+                        count_3star_spook += 1
+                        res_text = "★3 6% Rate Spook"
+                else:
+                    if ten_pull_counter == 10:
+                        count_2star += 1
+                        res_text = "★2 Student (10-Pull Protection)"
+                        ten_pull_counter = 0
+                    else:
+                        if random.random() < (BASE_2STAR_RATE / (1.0 - TOTAL_3STAR_RATE)):
+                            count_2star += 1
+                            res_text = "★2 Student"
+                            ten_pull_counter = 0
+                        else:
+                            count_1star += 1
+                            res_text = "★1 Student"
+
+                if points == 200:
+                    missing = "A" if not students_obtained["A"] else "B"
+                    students_obtained[missing] = True
+                    count_featured[missing] += 1
+                    res_text += f" -> [200 SPARK SHOP: Redeemed Student {missing}!]"
+                    points = 0
+
+                print(f"Roll {total_pulls:03d} [120 Pyroxene ] [Total Pyro: {pyro_spent:6,}] | Points: {points:03d}/200 | Result: {res_text}")
+
+            while not (students_obtained["A"] and students_obtained["B"]):
+                target = "A" if not students_obtained["A"] else "B"
+                total_pulls += 1
+                points += 1
+                pyro_spent += 120
+                ten_pull_counter += 1
+                res_text = ""
+
+                if random.random() < TOTAL_3STAR_RATE:
+                    ten_pull_counter = 0
+                    if random.random() < NATURAL_FEATURED_PROB:
+                        students_obtained[target] = True
+                        count_featured[target] += 1
+                        res_text = f"★3 FES STUDENT {target}!"
+                    else:
+                        count_3star_spook += 1
+                        res_text = "★3 6% Rate Spook"
+                else:
+                    if ten_pull_counter == 10:
+                        count_2star += 1
+                        res_text = "★2 Student (10-Pull Protection)"
+                        ten_pull_counter = 0
+                    else:
+                        if random.random() < (BASE_2STAR_RATE / (1.0 - TOTAL_3STAR_RATE)):
+                            count_2star += 1
+                            res_text = "★2 Student"
+                            ten_pull_counter = 0
+                        else:
+                            count_1star += 1
+                            res_text = "★1 Student"
+
+                if points == 200:
+                    missing = "A" if not students_obtained["A"] else "B"
+                    students_obtained[missing] = True
+                    count_featured[missing] += 1
+                    res_text += f" -> [200 SPARK SHOP: Redeemed Student {missing}!]"
+                    points = 0
+                    break
+
+                print(f"Roll {total_pulls:03d} [120 Pyroxene ] [Total Pyro: {pyro_spent:6,}] | Points: {points:03d}/200 | Result: {res_text}")
 
     total_3stars = count_3star_spook + sum(count_featured.values())
     total_featured = sum(count_featured.values())
-    print("\n" + "=" * 66)
+    print("\n" + "=" * 70)
     print(f"Fes Simulation finished in {total_pulls} pulls.")
-    print(f" TOTAL PYROXENES SPENT: {pyro_spent:,} Pyroxenes")
+    print(f"TOTAL PYROXENE SPENT: {pyro_spent:,} Pyroxenes ({tickets_used} Milestone 10-Tickets used)")
     print("\nSTUDENT YIELD SUMMARY:")
     print(f" • 1★ Students: {count_1star:3d}")
     print(f" • 2★ Students: {count_2star:3d}")
@@ -1282,7 +1535,7 @@ def run_comparative_simulation(num_senseis=100000):
 
     print("--- 1. REGULAR DUAL BANNER COMPARISON (GET BOTH A & B) ---")
     print(" Rules Supplement:")
-    print("  • New System: 3.0% Rate, 100-Charge 50/50, 200-Charge Guarantee + Milestone Tickets at 70/130/170/270/330/370.")
+    print("  • New System: 3.0% Rate, 100-Charge 50/50, 200-Charge Guarantee + Milestone 10-Tickets at 70/130/170/270/330/370.")
     print("  • Old System: 3.0% Rate, 200 Points = 1 Shop Spark.\n")
     
     print("  [NEW SYSTEM DETAILED STATS]")
