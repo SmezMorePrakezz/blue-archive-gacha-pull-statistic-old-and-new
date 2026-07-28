@@ -119,8 +119,7 @@ def simulate_new_system_dual(total_3star_rate=0.03, featured_rate=0.007):
     - Base 3★ rate: 3.0% (Featured: 0.7%)
     - 100th charge: 3★ 50/50 soft pity.
     - 200th charge: 100% hard guarantee.
-    - Milestone tickets are awarded at 70, 130, 170, etc. as 10-pull tickets.
-      When used, all 10 pulls are performed as a unit on the current banner.
+    - Milestone 10-pull tickets are discrete and do NOT overlap between banners.
     """
     TOTAL_3STAR_RATE = total_3star_rate
     FEATURED_RATE = featured_rate
@@ -131,7 +130,6 @@ def simulate_new_system_dual(total_3star_rate=0.03, featured_rate=0.007):
     pyro_spent = 0
     spooks = 0
     pity_200_hits = 0
-    available_tickets = 0
 
     students_obtained = {"A": False, "B": False}
 
@@ -139,23 +137,26 @@ def simulate_new_system_dual(total_3star_rate=0.03, featured_rate=0.007):
         if students_obtained[target]:
             continue
 
-        while not students_obtained[target]:
-            # Determine if this pull set uses a 10-pull ticket or 120 Pyroxenes
-            if available_tickets > 0:
-                available_tickets -= 1
-                is_ticket_pull = True
-            else:
-                is_ticket_pull = False
+        # Reset per-banner ticket tracking when switching targets
+        pending_milestone_ticket = False
 
+        while not students_obtained[target]:
             total_pulls += 1
             charge_count += 1
 
-            if not is_ticket_pull:
+            if pending_milestone_ticket:
+                # 10-pull ticket active: 10 free pulls on current banner
+                pass
+            else:
                 pyro_spent += 120
 
-            # --- Check if this pull triggers a milestone 10-pull ticket reward ---
+            # Check if current roll earned a milestone 10-pull ticket
             if total_pulls in MILESTONE_TICKET_PULLS:
-                available_tickets += 1
+                pending_milestone_ticket = True
+
+            # If inside a 10-pull ticket block, consume 1 charge roll per loop iteration
+            if pending_milestone_ticket and (total_pulls % 10 == 0):
+                pending_milestone_ticket = False
 
             # --- CASE 1: HARD GUARANTEE AT 200 CHARGES ---
             if charge_count == 200:
@@ -260,26 +261,26 @@ def simulate_pre_fes_free_pulls_dual(system="NEW"):
 
     if system == "NEW":
         charge_count = 0
-        available_tickets = 0
-
         for target in ["A", "B"]:
             if students_obtained[target]:
                 continue
+
+            pending_milestone_ticket = False
 
             while not students_obtained[target]:
                 total_pulls += 1
                 charge_count += 1
 
-                if total_pulls <= 100:
-                    pass  # Free event pulls
-                elif available_tickets > 0:
-                    # Spending milestone 10-pull ticket
-                    pass
+                if total_pulls <= 100 or pending_milestone_ticket:
+                    pass  # Free event pulls or milestone ticket pulls
                 else:
                     pyro_spent += 120
 
                 if total_pulls in MILESTONE_TICKET_PULLS:
-                    available_tickets += 1
+                    pending_milestone_ticket = True
+
+                if pending_milestone_ticket and (total_pulls % 10 == 0):
+                    pending_milestone_ticket = False
 
                 if charge_count == 200:
                     students_obtained[target] = True
@@ -363,23 +364,27 @@ def simulate_fes_second_half_dual(system="NEW", behavior="TARGET_STOP"):
     if behavior == "TARGET_STOP":
         if system == "NEW":
             charge_count = 0
-            available_tickets = 0
 
             for target in ["A", "B"]:
                 if students_obtained[target]:
                     continue
 
+                pending_milestone_ticket = False
+
                 while not students_obtained[target]:
                     total_pulls += 1
                     charge_count += 1
 
-                    if available_tickets > 0:
+                    if pending_milestone_ticket:
                         pass
                     else:
                         pyro_spent += 120
 
                     if total_pulls in MILESTONE_TICKET_PULLS:
-                        available_tickets += 1
+                        pending_milestone_ticket = True
+
+                    if pending_milestone_ticket and (total_pulls % 10 == 0):
+                        pending_milestone_ticket = False
 
                     if charge_count == 200:
                         students_obtained[target] = True
@@ -460,21 +465,25 @@ def simulate_fes_second_half_dual(system="NEW", behavior="TARGET_STOP"):
         total_pulls = 0
         pyro_spent = 0
         charge_count = 0
-        available_tickets = 0
 
         if system == "NEW":
             pity_200_hits = 0
+            pending_milestone_ticket = False
+
             for p in range(1, 201):
                 total_pulls += 1
                 charge_count += 1
 
-                if available_tickets > 0:
+                if pending_milestone_ticket:
                     pass
                 else:
                     pyro_spent += 120
 
                 if total_pulls in MILESTONE_TICKET_PULLS:
-                    available_tickets += 1
+                    pending_milestone_ticket = True
+
+                if pending_milestone_ticket and (total_pulls % 10 == 0):
+                    pending_milestone_ticket = False
 
                 target = "A" if not students_obtained["A"] else "B"
                 if charge_count == 200:
@@ -507,13 +516,16 @@ def simulate_fes_second_half_dual(system="NEW", behavior="TARGET_STOP"):
                 total_pulls += 1
                 charge_count += 1
 
-                if available_tickets > 0:
+                if pending_milestone_ticket:
                     pass
                 else:
                     pyro_spent += 120
 
                 if total_pulls in MILESTONE_TICKET_PULLS:
-                    available_tickets += 1
+                    pending_milestone_ticket = True
+
+                if pending_milestone_ticket and (total_pulls % 10 == 0):
+                    pending_milestone_ticket = False
 
                 if charge_count == 200:
                     students_obtained[target] = True
@@ -741,10 +753,11 @@ def generate_graphical_report(data_store, save_prefix="blue_archive_gacha_stats"
 
 
 # ==============================================================================
-# SECTION 4: INDIVIDUAL SENSEI MODE (ROLL-BY-ROLL STEPPER)
+# SECTION 4: INDIVIDUAL SENSEI MODE (ROLL-BY-ROLL STEPPER WITH PYRO DISPLAY)
 # ==============================================================================
 
 def run_individual_mode():
+    """Runs pull-by-pull detailed simulations with live Pyroxene cost counters."""
     while True:
         clear_screen()
         print("==================================================================")
@@ -824,30 +837,32 @@ def simulate_individual_regular_dual(system="NEW"):
 
     if system == "NEW":
         charge = 0
-        available_tickets = 0
 
         for target in ["A", "B"]:
             if students_obtained[target]:
                 continue
+
+            pending_milestone_ticket = False
+
             print(f"\n>>> Target Banner Student {target} <<<")
             while not students_obtained[target]:
-                if available_tickets > 0:
-                    available_tickets -= 1
-                    cost_str = "TICKET"
-                else:
-                    pyro_spent += 120
-                    cost_str = "120 Pyroxene"
-
                 total_pulls += 1
                 charge += 1
                 ten_pull_counter += 1
-                res_text = ""
+
+                if pending_milestone_ticket:
+                    cost = "10-TICKET"
+                else:
+                    cost = "120 Pyro"
+                    pyro_spent += 120
 
                 if total_pulls in MILESTONE_TICKET_PULLS:
-                    available_tickets += 1
-                    res_text_milestone = " -> [MILESTONE: Received 10-Pull Ticket!]"
-                else:
-                    res_text_milestone = ""
+                    pending_milestone_ticket = True
+
+                res_text_milestone = " -> [MILESTONE: Received 10-Pull Ticket!]" if total_pulls in MILESTONE_TICKET_PULLS else ""
+
+                if pending_milestone_ticket and (total_pulls % 10 == 0):
+                    pending_milestone_ticket = False
 
                 if charge == 200:
                     students_obtained[target] = True
@@ -890,7 +905,7 @@ def simulate_individual_regular_dual(system="NEW"):
                                 count_1star += 1
                                 res_text = "★1 Student" + res_text_milestone
 
-                print(f"Roll {total_pulls:03d} [Pyros: {pyro_spent:6,d} | Cost: {cost_str:12s}] | Charge: {charge:03d}/200 | Result: {res_text}")
+                print(f"Roll {total_pulls:03d} [{cost:9s}] (Spent: {pyro_spent:6,d} Pyros) | Charge: {charge:03d}/200 | Result: {res_text}")
                 if students_obtained[target]:
                     break
     else:  # OLD SYSTEM
@@ -898,9 +913,9 @@ def simulate_individual_regular_dual(system="NEW"):
         while not (students_obtained["A"] and students_obtained["B"]):
             target = "A" if not students_obtained["A"] else "B"
             total_pulls += 1
-            pyro_spent += 120
             points += 1
             ten_pull_counter += 1
+            pyro_spent += 120
             res_text = ""
 
             if random.random() < TOTAL_3STAR_RATE:
@@ -933,12 +948,13 @@ def simulate_individual_regular_dual(system="NEW"):
                 res_text += f" -> [200 SPARK SHOP: Redeemed Student {missing}!]"
                 points = 0
 
-            print(f"Roll {total_pulls:03d} [Pyros: {pyro_spent:6,d} | Cost: 120 Pyroxene  ] | Points: {points:03d}/200 | Target: {target} | Result: {res_text}")
+            print(f"Roll {total_pulls:03d} [120 Pyro ] (Spent: {pyro_spent:6,d} Pyros) | Points: {points:03d}/200 | Target: {target} | Result: {res_text}")
 
     total_3stars = count_3star_spook + sum(count_featured.values())
     total_featured = sum(count_featured.values())
     print("\n" + "=" * 66)
-    print(f"SUCCESS! Acquired both students in {total_pulls} rolls (Total Pyroxene Spent: {pyro_spent:,}).")
+    print(f"SUCCESS! Acquired both students in {total_pulls} total rolls.")
+    print(f" TOTAL PYROXENES SPENT: {pyro_spent:,} Pyroxenes")
     print("\nSTUDENT YIELD SUMMARY:")
     print(f" • 1★ Students: {count_1star:3d}")
     print(f" • 2★ Students: {count_2star:3d}")
@@ -964,32 +980,34 @@ def simulate_individual_pre_fes(system="NEW"):
 
     if system == "NEW":
         charge = 0
-        available_tickets = 0
 
         for target in ["A", "B"]:
             if students_obtained[target]:
                 continue
+
+            pending_milestone_ticket = False
+
             print(f"\n>>> Target Banner Pre-Fes Student {target} <<<")
             while not students_obtained[target]:
                 total_pulls += 1
                 charge += 1
                 ten_pull_counter += 1
-                res_text = ""
 
                 if total_pulls <= 100:
-                    cost_str = "FREE EVENT"
-                elif available_tickets > 0:
-                    available_tickets -= 1
-                    cost_str = "TICKET"
+                    cost = "FREE EVENT"
+                elif pending_milestone_ticket:
+                    cost = "10-TICKET"
                 else:
+                    cost = "120 Pyro"
                     pyro_spent += 120
-                    cost_str = "120 Pyroxene"
 
                 if total_pulls in MILESTONE_TICKET_PULLS:
-                    available_tickets += 1
-                    res_text_milestone = " -> [MILESTONE: Received 10-Pull Ticket!]"
-                else:
-                    res_text_milestone = ""
+                    pending_milestone_ticket = True
+
+                res_text_milestone = " -> [MILESTONE: Received 10-Pull Ticket!]" if total_pulls in MILESTONE_TICKET_PULLS else ""
+
+                if pending_milestone_ticket and (total_pulls % 10 == 0):
+                    pending_milestone_ticket = False
 
                 if charge == 200:
                     students_obtained[target] = True
@@ -1032,20 +1050,21 @@ def simulate_individual_pre_fes(system="NEW"):
                                 count_1star += 1
                                 res_text = "★1 Student" + res_text_milestone
 
-                print(f"Roll {total_pulls:03d} [Pyros: {pyro_spent:6,d} | Cost: {cost_str:12s}] | Charge: {charge:03d}/200 | Result: {res_text}")
+                print(f"Roll {total_pulls:03d} [{cost:10s}] (Spent: {pyro_spent:6,d} Pyros) | Charge: {charge:03d}/200 | Result: {res_text}")
     else:
         points = 0
         while not (students_obtained["A"] and students_obtained["B"]):
             target = "A" if not students_obtained["A"] else "B"
             total_pulls += 1
-            if total_pulls > 100:
-                pyro_spent += 120
-                cost_str = "120 Pyroxene"
-            else:
-                cost_str = "FREE EVENT"
-
             points += 1
             ten_pull_counter += 1
+
+            if total_pulls <= 100:
+                cost = "FREE EVENT"
+            else:
+                cost = "120 Pyro"
+                pyro_spent += 120
+
             res_text = ""
 
             if random.random() < TOTAL_3STAR_RATE:
@@ -1078,12 +1097,13 @@ def simulate_individual_pre_fes(system="NEW"):
                 res_text += f" -> [200 SPARK SHOP: Redeemed Student {missing}!]"
                 points = 0
 
-            print(f"Roll {total_pulls:03d} [Pyros: {pyro_spent:6,d} | Cost: {cost_str:12s}] | Points: {points:03d}/200 | Target: {target} | Result: {res_text}")
+            print(f"Roll {total_pulls:03d} [{cost:10s}] (Spent: {pyro_spent:6,d} Pyros) | Points: {points:03d}/200 | Target: {target} | Result: {res_text}")
 
     total_3stars = count_3star_spook + sum(count_featured.values())
     total_featured = sum(count_featured.values())
     print("\n" + "=" * 66)
-    print(f"SUCCESS! Both Pre-Fes students acquired in {total_pulls} pulls (Total Pyroxene Spent: {pyro_spent:,}).")
+    print(f"SUCCESS! Both Pre-Fes students acquired in {total_pulls} pulls.")
+    print(f" TOTAL PYROXENES SPENT: {pyro_spent:,} Pyroxenes")
     print("\nSTUDENT YIELD SUMMARY:")
     print(f" • 1★ Students: {count_1star:3d}")
     print(f" • 2★ Students: {count_2star:3d}")
@@ -1110,30 +1130,32 @@ def simulate_individual_fes_second_half(system="NEW", behavior="TARGET_STOP"):
     if behavior == "TARGET_STOP":
         if system == "NEW":
             charge = 0
-            available_tickets = 0
 
             for target in ["A", "B"]:
                 if students_obtained[target]:
                     continue
+
+                pending_milestone_ticket = False
+
                 print(f"\n>>> Target Fes Student {target} <<<")
                 while not students_obtained[target]:
                     total_pulls += 1
                     charge += 1
                     ten_pull_counter += 1
-                    res_text = ""
 
-                    if available_tickets > 0:
-                        available_tickets -= 1
-                        cost_str = "TICKET"
+                    if pending_milestone_ticket:
+                        cost = "10-TICKET"
                     else:
+                        cost = "120 Pyro"
                         pyro_spent += 120
-                        cost_str = "120 Pyroxene"
 
                     if total_pulls in MILESTONE_TICKET_PULLS:
-                        available_tickets += 1
-                        res_text_milestone = " -> [MILESTONE: Received 10-Pull Ticket!]"
-                    else:
-                        res_text_milestone = ""
+                        pending_milestone_ticket = True
+
+                    res_text_milestone = " -> [MILESTONE: Received 10-Pull Ticket!]" if total_pulls in MILESTONE_TICKET_PULLS else ""
+
+                    if pending_milestone_ticket and (total_pulls % 10 == 0):
+                        pending_milestone_ticket = False
 
                     if charge == 200:
                         students_obtained[target] = True
@@ -1176,15 +1198,15 @@ def simulate_individual_fes_second_half(system="NEW", behavior="TARGET_STOP"):
                                     count_1star += 1
                                     res_text = "★1 Student" + res_text_milestone
 
-                    print(f"Roll {total_pulls:03d} [Pyros: {pyro_spent:6,d} | Cost: {cost_str:12s}] | Charge: {charge:03d}/200 | Result: {res_text}")
+                    print(f"Roll {total_pulls:03d} [{cost:9s}] (Spent: {pyro_spent:6,d} Pyros) | Charge: {charge:03d}/200 | Result: {res_text}")
         else:
             points = 0
             while not (students_obtained["A"] and students_obtained["B"]):
                 target = "A" if not students_obtained["A"] else "B"
                 total_pulls += 1
-                pyro_spent += 120
                 points += 1
                 ten_pull_counter += 1
+                pyro_spent += 120
                 res_text = ""
 
                 if random.random() < TOTAL_3STAR_RATE:
@@ -1217,12 +1239,13 @@ def simulate_individual_fes_second_half(system="NEW", behavior="TARGET_STOP"):
                     res_text += f" -> [200 SPARK SHOP: Redeemed Student {missing}!]"
                     points = 0
 
-                print(f"Roll {total_pulls:03d} [Pyros: {pyro_spent:6,d} | Cost: 120 Pyroxene  ] | Points: {points:03d}/200 | Result: {res_text}")
+                print(f"Roll {total_pulls:03d} [120 Pyro ] (Spent: {pyro_spent:6,d} Pyros) | Points: {points:03d}/200 | Result: {res_text}")
 
     total_3stars = count_3star_spook + sum(count_featured.values())
     total_featured = sum(count_featured.values())
     print("\n" + "=" * 66)
-    print(f"Fes Simulation finished in {total_pulls} pulls (Total Pyroxene Spent: {pyro_spent:,}).")
+    print(f"Fes Simulation finished in {total_pulls} pulls.")
+    print(f" TOTAL PYROXENES SPENT: {pyro_spent:,} Pyroxenes")
     print("\nSTUDENT YIELD SUMMARY:")
     print(f" • 1★ Students: {count_1star:3d}")
     print(f" • 2★ Students: {count_2star:3d}")
